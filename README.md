@@ -25,7 +25,7 @@ php decomposer.php
 
 Which will enter interactive mode and guide you through the entire process.
 
-Once you grow tired of manually entering information, you can pass in some or all the answers to the questions on the command-line:
+Once you grow tired of manually entering information, you can pass in some or all of the answers to the questions on the command-line:
 
 ```
 php decomposer.php list
