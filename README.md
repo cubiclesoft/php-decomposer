@@ -88,7 +88,7 @@ If you design a working patch for using a specific project with Decomposer, be a
 
 At the end of a Decomposer run, it outputs any 'warnings' it encountered and 'failed' files.  Warnings are emitted for very specific functions that are known to cause issues and will likely require a patch.  Failed files are emitted for a variety of reasons and may or may not result in functional output.
 
-Any patches should be extremely laser-focused such that they are immutable if they are applied multiple times as Decomposer will always attempt to apply all patches before instrumenting.
+Any patches should be extremely laser-focused such that they are idempotent since Decomposer will always attempt to apply all patches before instrumenting.
 
 How It Works
 ------------
