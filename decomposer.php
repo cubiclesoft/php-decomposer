@@ -502,6 +502,8 @@
 			if (!file_exists($stagingpath . "/instrumented_all.json"))  CLI::DisplayError("Unable to find the file '" . $stagingpath . "/instrumented_all.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to instrument the Composer build.");
 			if (!file_exists($stagingpath . "/instrumented_depend.json"))  CLI::DisplayError("Unable to find the file '" . $stagingpath . "/instrumented_depend.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to instrument the Composer build.");
 
+			@unlink($stagingpath . "/instrument_all.php");
+
 			// Process instrumented files first.
 			$finalfiles = array();
 			if ($mode === "all")
