@@ -62,16 +62,16 @@ Instrumenting Builds
 
 The 'decompose' command does all of the heavy lifting.  Using the 'all' mode will always work but might be a bit more resource intensive (e.g. RAM) than might be desired on the tail end of things (i.e. your application).  To minimize resource usage, it is possible to teach the command about the classes that are actually going to be used in the most common scenarios.  This is accomplished by instrumenting the build with one or more working examples.
 
-Edit the `/projects/[yourprojectname]/staging/examples.php` file that was generated during project creation.  After that, grab some example code and put it where `examples.php` says to put example code.  Test the functionality by manually running `examples.php` from the command-line.  Note that the usual `require "vendor/autoload.php";` should NOT be called as that is automatically handled by the boilerplate code.
+Edit the `/projects/[yourprojectname]/staging/examples.php` file that was generated during project creation.  After that, grab some example code and put it where `examples.php` says to put example code.  Test the functionality by manually running `examples.php` from the command-line.  Note that the usual `require "vendor/autoload.php";` should NOT be called as that is automatically handled by `DecomposerHelper::Init()`.
 
 ```
 cd projects/[yourprojectname]/staging
 php examples.php
 ```
 
-Running the code updates 'instrumented.json', which contains a list of files that were loaded by `examples.php`.  This information is used to instrument the build when using 'auto' and 'none'.
+Running the code updates 'instrumented.json', which contains a list of files that were loaded by `examples.php`.  This information is used to correctly instrument the build when decomposing later on.
 
-Once the code is working, preferably with no output, the 'auto' and 'none' modes become more useful.
+Once the code is working, preferably with no output to the screen, the 'auto' and 'none' modes become more useful.
 
 ```
 php decomposer.php decompose [yourprojectname] auto
@@ -86,15 +86,15 @@ Sometimes a Composer project makes assumptions about where it sits in its ecosys
 
 If you design a working patch for using a specific project with Decomposer, be a good netizen and commit it back to the original repository.  The authors will (possibly) appreciate it.
 
-At the end of a Decomposer run, it outputs any 'warnings' it encountered and 'failed' files.  Warnings are emitted for very specific functions that are known to cause issues and will likely require a patch.  Failed files are emitted for a variety of reasons and may or may not result in functional output.
+At the end of a Decomposer run, it outputs any 'warnings' it encountered as well as any 'failed' files.  Warnings are emitted for very specific functions that are known to cause issues and will likely require a patch.  Failed files are emitted for a variety of reasons and may or may not result in functional output.
 
 Any patches should be extremely laser-focused such that they are idempotent since Decomposer will always attempt to apply all patches before instrumenting.
 
 How It Works
 ------------
 
-Decomposer takes in a number of pieces of information, runs any patches that need to be applied, instruments the build, generates a few PHP files to guarantee that dependency order is maintained and that no errors occur, and verifies the build.
+Decomposer takes in a number of pieces of information, runs any patches that need to be applied, instruments the build multiple times, generates several PHP files during the process to guarantee that dependency order is maintained and that no errors occur, and verifies the build.
 
-The most interesting parts of the process are extracting just the useful content bits (i.e. code) and determining if adding the contents of any given file will result in PHP parser errors.  The former is accomplished with the built-in PHP tokenizer `token_get_all()`, which does most of the work of identifying things such as comments, whitespace, and namespace keywords.  Once the code has been cleaned up, it is bolted onto the end of the current working set and tested.  If the new working set fails with an error, then the file is deferred until later and the next one is tried.  This process repeats ad nauseum until no more files can be processed.
+The most interesting parts of the process are extracting just the useful content bits (i.e. code minus comments), the approach used to determine if a file failed to load, and how dependency calculations are made.  The built-in PHP tokenizer function `token_get_all()` does most of the work of identifying things such as comments, whitespace, and namespace keywords.  Determining file load failures is a bit trickier but each PHP file that will be loaded is written to disk before it is included.  Dependencies are determined by monitoring what additional files are loaded when a specific PHP file is loaded.  Removing failed files and resolving dependencies repeats ad nauseum until nothing else can be processed.
 
-Decomposer is rather brute force-ish in its approach, which is why it can take anywhere from a few seconds to a few minutes to decompose a project:  Add class, run PHP, add class, run PHP, add class, run PHP, etc.
+Decomposer is somewhat brute force-ish in its approach and abuses the Composer autoloader to get to its destination, which is why it can take anywhere from a few seconds to a few minutes to decompose a project.

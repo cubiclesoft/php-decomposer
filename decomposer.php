@@ -208,49 +208,14 @@
 			}
 			closedir($dir);
 
-			// Instrument the build.
-			@unlink($stagingpath . "/instrumented.json");
-			putenv("DECOMPOSER");
-			$cwd = getcwd();
-			chdir($stagingpath);
-			system(escapeshellarg(PHP_BINARY) . " examples.php");
-			chdir($cwd);
-
-			if (!file_exists($stagingpath . "/instrumented.json"))  CLI::DisplayError("Unable to find the file '" . $stagingpath . "/instrumented.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to instrument the Composer build.");
-
-			function FindPHPFiles($path)
+			function DumpTokens($tokens)
 			{
-				global $extrafiles;
-
-				$dir = @opendir($path);
-				if ($dir)
+				foreach ($tokens as $token)
 				{
-					while (($file = readdir($dir)) !== false)
-					{
-						if ($file !== "." && $file !== "..")
-						{
-							if (is_dir($path . "/" . $file))  FindPHPFiles($path . "/" . $file);
-							else if (strtolower(substr($file, -4)) === ".php")  $extrafiles[$path . "/" . $file] = true;
-						}
-					}
-
-					closedir($dir);
+					if (is_array($token))  echo "Line " . $token[2] . ": " . token_name($token[0]) . " | " . $token[1] . "\n";
+					else  echo "Str:  " . $token . "\n";
 				}
 			}
-
-			// Find all vendor PHP files.
-			$extrafiles = array();
-			$path = $stagingpath . "/vendor";
-			$dir = @opendir($path);
-			if (!$dir)  CLI::DisplayError("Unable to find the directory '" . $path . "'.  Did you run Composer?");
-			while (($file = readdir($dir)) !== false)
-			{
-				if ($file !== "." && $file !== ".." && $file !== "composer" && is_dir($path . "/" . $file))
-				{
-					FindPHPFiles($path . "/" . $file);
-				}
-			}
-			closedir($dir);
 
 			$warnings = array();
 			function ProcessNamespacedFile($file, $requirenamespace)
@@ -347,128 +312,243 @@
 				return $result;
 			}
 
+			function FindPHPFiles($path)
+			{
+				global $extrafiles;
+
+				if (is_file($path) && strtolower(substr($path, -4)) === ".php")
+				{
+					$extrafiles[$path] = ProcessNamespacedFile($path, false);
+
+					return;
+				}
+
+				$dir = @opendir($path);
+				if ($dir)
+				{
+					while (($file = readdir($dir)) !== false)
+					{
+						if ($file !== "." && $file !== "..")
+						{
+							if (is_dir($path . "/" . $file))  FindPHPFiles($path . "/" . $file);
+							else if (strtolower(substr($file, -4)) === ".php")  $extrafiles[$path . "/" . $file] = ProcessNamespacedFile($path . "/" . $file, false);
+						}
+					}
+
+					closedir($dir);
+				}
+			}
+
+			function FindComposerFiles($path)
+			{
+				if (file_exists($path . "/composer.json"))
+				{
+					$data = json_decode(file_get_contents($path . "/composer.json"), true);
+					if (is_array($data) && isset($data["autoload"]))
+					{
+						foreach ($data["autoload"] as $items)
+						{
+							foreach ($items as $item)
+							{
+								if (substr($item, -1) === "/")  $item = substr($item, 0, -1);
+
+								FindPHPFiles($path . "/" . $item);
+							}
+						}
+					}
+
+					return;
+				}
+
+				$dir = @opendir($path);
+				if ($dir)
+				{
+					while (($file = readdir($dir)) !== false)
+					{
+						if ($file !== "." && $file !== "..")
+						{
+							if (is_dir($path . "/" . $file))  FindComposerFiles($path . "/" . $file);
+						}
+					}
+
+					closedir($dir);
+				}
+			}
+
+			// Find all vendor PHP class files.
+			$extrafiles = array();
+			$path = $stagingpath . "/vendor";
+			$dir = @opendir($path);
+			if (!$dir)  CLI::DisplayError("Unable to find the directory '" . $path . "'.  Did you run Composer?");
+			while (($file = readdir($dir)) !== false)
+			{
+				if ($file !== "." && $file !== ".." && $file !== "composer" && is_dir($path . "/" . $file))
+				{
+					FindComposerFiles($path . "/" . $file);
+				}
+			}
+			closedir($dir);
+
+			// Instrument the build normally.
+			@unlink($stagingpath . "/instrument_all_test.txt");
+			@unlink($stagingpath . "/instrumented.json");
+			@unlink($stagingpath . "/instrumented_all.json");
+			@unlink($stagingpath . "/instrumented_failed.json");
+			@unlink($stagingpath . "/instrumented_depend.json");
+			putenv("DECOMPOSER");
+			$cwd = getcwd();
+			chdir($stagingpath);
+			system(escapeshellarg(PHP_BINARY) . " examples.php");
+			chdir($cwd);
+
+			if (!file_exists($stagingpath . "/instrumented.json"))  CLI::DisplayError("Unable to find the file '" . $stagingpath . "/instrumented.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to instrument the Composer build.");
+
+			// Reorder the files list based on the instrumentation that took place.
+			$extrafiles2 = array();
+			$instrumented = json_decode(file_get_contents($stagingpath . "/instrumented.json"), true);
+			foreach ($instrumented as $file)
+			{
+				$file = str_replace("\\", "/", $file);
+
+				if (isset($extrafiles[$file]))
+				{
+					$extrafiles2[$file] = $extrafiles[$file];
+
+					unset($extrafiles[$file]);
+				}
+			}
+
+			foreach ($extrafiles as $file => $data)  $extrafiles2[$file] = $data;
+			$extrafiles = $extrafiles2;
+
+			$failedfiles = array();
+			do
+			{
+				// Generate an instrumentation PHP file.
+				@unlink($stagingpath . "/instrument_all_test.txt");
+				$data = "<" . "?php\n\t// Decomposer automatically generated instrumentation file.";
+				$data .= "\n\tif (getenv(\"DECOMPOSER\") !== \"INSTRUMENT_ALL\")  exit();";
+				foreach ($extrafiles as $filename => $data2)
+				{
+					$data .= "\n\tDecomposerHelper::LoadFile(" . var_export($filename, true) . ");";
+				}
+
+				file_put_contents($stagingpath . "/instrument_all.php", $data);
+
+				// Instrument the build.
+				@unlink($stagingpath . "/instrumented_all.json");
+				@unlink($stagingpath . "/instrumented_depend.json");
+				putenv("DECOMPOSER=INSTRUMENT_ALL");
+				$cwd = getcwd();
+				chdir($stagingpath);
+				ob_start();
+				passthru(escapeshellarg(PHP_BINARY) . " examples.php 2>&1 > instrumented_log.txt");
+				ob_end_clean();
+				chdir($cwd);
+				putenv("DECOMPOSER");
+
+				$redo = false;
+
+				// If a fatal error occurred, attempt to recover.
+				if (file_exists($stagingpath . "/instrument_all_test.txt"))
+				{
+					$filenames = explode("\n", trim(file_get_contents($stagingpath . "/instrument_all_test.txt")));
+					$filename = array_pop($filenames);
+					if (!isset($extrafiles[$filename]))
+					{
+						if ($filename === "")  CLI::DisplayError(file_get_contents($stagingpath . "/instrumented_log.txt") . "\n\nA fatal, unrecoverable error occurred.");
+						else  CLI::DisplayError("The file '" . $filename . "' failed to load but is not in the list of files to instrument.");
+					}
+
+					if (!$suppressoutput)  echo "Removing:  " . $filename . "\n";
+					$failedfiles[] = $filename;
+					unset($extrafiles[$filename]);
+
+					$redo = true;
+				}
+
+				// Reorder the files based on dependencies.
+				if (file_exists($stagingpath . "/instrumented_depend.json"))
+				{
+					$dependencies = json_decode(file_get_contents($stagingpath . "/instrumented_depend.json"), true);
+					if (!$suppressoutput)  echo "Dependencies left to resolve:  " . count($dependencies) . "\n";
+
+					$extrafiles2 = array();
+					foreach ($extrafiles as $file => $data)
+					{
+						if (isset($dependencies[$file]))
+						{
+							foreach ($dependencies[$file] as $file2)
+							{
+								$file2 = str_replace("\\", "/", $file2);
+
+								if (!isset($extrafiles[$file2]))  CLI::DisplayError("The file '" . $file2 . "' is a dependency of '" . $file . "' but '" . $file2 . "' is not in the list of files to instrument.");
+
+								$extrafiles2[$file2] = $extrafiles[$file2];
+								unset($extrafiles[$file2]);
+							}
+
+							$redo = true;
+						}
+
+						$extrafiles2[$file] = $data;
+						unset($extrafiles[$file]);
+					}
+
+					$extrafiles = $extrafiles2;
+				}
+			} while ($redo);
+
+			if (!file_exists($stagingpath . "/instrumented_all.json"))  CLI::DisplayError("Unable to find the file '" . $stagingpath . "/instrumented_all.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to instrument the Composer build.");
+			if (!file_exists($stagingpath . "/instrumented_depend.json"))  CLI::DisplayError("Unable to find the file '" . $stagingpath . "/instrumented_depend.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to instrument the Composer build.");
+
 			// Process instrumented files first.
 			$finalfiles = array();
-			$instrumented = json_decode(file_get_contents($stagingpath . "/instrumented.json"), true);
 			if ($mode === "all")
 			{
 				foreach ($extrafiles as $file => $val)  $instrumented[] = $file;
 			}
-			$workfile = "<" . "?php\n\t// Working file.\n\trequire_once " . var_export($finalpath . "/decomposed.php", true) . ";\n";
-			file_put_contents($finalpath . "/workfile.php", $workfile);
-			$data = array("<" . "?php\n\t// Generated with Decomposer.");
-			do
+			$data = "<" . "?php\n\t// Generated with Decomposer.";
+			$instrumented2 = array();
+			foreach ($instrumented as $file)  $instrumented2[str_replace("\\", "/", $file)] = true;
+			foreach ($extrafiles as $file => $data2)
 			{
-				// Attempt to resolve all dependencies in dependency order.
-				$repeatable = false;
-				$processed = false;
-
-				foreach ($instrumented as $num => $file)
+				if (isset($instrumented2[$file]))
 				{
-					$file = str_replace("\\", "/", $file);
+					$data .= "\n\n" . $data2;
 
-					if (!isset($extrafiles[$file]))  unset($instrumented[$num]);
-					else
-					{
-						$result = ProcessNamespacedFile($file, true);
-						if ($result === false)  unset($instrumented[$num]);
-						else
-						{
-							// Verify correct functionality.
-							$data2 = $data;
-							$data2[] = $result;
-
-							file_put_contents($finalpath . "/decomposed.php", implode("\n\n", $data2));
-
-							ob_start();
-							passthru(escapeshellarg(PHP_BINARY) . " " . escapeshellarg($finalpath . "/workfile.php") . " 2>&1");
-							$result = trim(ob_get_contents());
-							ob_end_clean();
-
-							if ($result !== "")  $repeatable = true;
-							else
-							{
-								$data = $data2;
-
-								unset($instrumented[$num]);
-								unset($extrafiles[$file]);
-
-								$processed = true;
-							}
-						}
-					}
+					unset($extrafiles[$file]);
 				}
-			} while ($repeatable && $processed);
-
-			// Dump final work file before appending autoloader logic.
-			file_put_contents($finalpath . "/decomposed.php", implode("\n\n", $data));
+			}
 
 			if ($mode === "auto" && count($extrafiles))
 			{
-				$str = "namespace {\n";
+				$str .= "\n\n";
+				$str .= "namespace {\n";
 				$str .= "\tspl_autoload_register(function (\$class) {\n";
 				$str .= "\t\tif (file_exists(__DIR__ . \"/" . $name . "_decomposed_extras.php\"))  require_once __DIR__ . \"/" . $name . "_decomposed_extras.php\";\n";
 				$str .= "\t});\n";
 				$str .= "}";
 
-				$data[] = $str;
+				$data .= $str;
 			}
 
-			file_put_contents($finalpath . "/" . $name . "_decomposed.php", implode("\n\n", $data));
+			file_put_contents($finalpath . "/" . $name . "_decomposed.php", $data);
 			$finalfiles[] = $finalpath . "/" . $name . "_decomposed.php";
 
 			@unlink($finalpath . "/" . $name . "_decomposed_extras.php");
 			if ($mode !== "all" && count($extrafiles))
 			{
-				$workfile .= "\trequire_once " . var_export($finalpath . "/decomposed_extras.php", true) . ";\n";
-				file_put_contents($finalpath . "/workfile.php", $workfile);
+				$data = "<" . "?php\n\t// Generated with Decomposer.";
 
-				$data = array("<" . "?php\n\t// Generated with Decomposer.");
-
-				do
+				foreach ($extrafiles as $file => $data2)
 				{
-					// Attempt to resolve all dependencies in dependency order.
-					$repeatable = false;
-					$processed = false;
+					$data .= "\n\n" . $data2;
+				}
 
-					foreach ($extrafiles as $file => $val)
-					{
-						$result = ProcessNamespacedFile($file, true);
-						if ($result === false)  unset($extrafiles[$file]);
-						else
-						{
-							// Verify correct functionality.
-							$data2 = $data;
-							$data2[] = $result;
-
-							file_put_contents($finalpath . "/decomposed_extras.php", implode("\n\n", $data2));
-
-							ob_start();
-							passthru(escapeshellarg(PHP_BINARY) . " " . escapeshellarg($finalpath . "/workfile.php") . " 2>&1");
-							$result = trim(ob_get_contents());
-							ob_end_clean();
-
-							if ($result !== "")  $repeatable = true;
-							else
-							{
-								$data = $data2;
-
-								unset($extrafiles[$file]);
-
-								$processed = true;
-							}
-						}
-					}
-				} while ($repeatable && $processed);
-
-				file_put_contents($finalpath . "/" . $name . "_decomposed_extras.php", implode("\n\n", $data));
+				file_put_contents($finalpath . "/" . $name . "_decomposed_extras.php", $data);
 				$finalfiles[] = $finalpath . "/" . $name . "_decomposed_extras.php";
 			}
-
-			// Cleanup work environment.
-			@unlink($finalpath . "/workfile.php");
-			@unlink($finalpath . "/decomposed.php");
-			@unlink($finalpath . "/decomposed_extras.php");
 
 			// Run the finalized build.
 			@unlink($finalpath . "/orig_composer.json");
@@ -485,7 +565,7 @@
 			$result = array(
 				"success" => true,
 				"warnings" => $warnings,
-				"failed" => $extrafiles,
+				"failed" => $failedfiles,
 				"project" => array(
 					"name" => $name,
 					"path" => $finalpath,
