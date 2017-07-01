@@ -422,6 +422,7 @@
 			$extrafiles = $extrafiles2;
 
 			$failedfiles = array();
+			@unlink($stagingpath . "/instrumented_log.txt");
 			do
 			{
 				// Generate an instrumentation PHP file.
@@ -442,7 +443,7 @@
 				$cwd = getcwd();
 				chdir($stagingpath);
 				ob_start();
-				passthru(escapeshellarg(PHP_BINARY) . " examples.php 2>&1 > instrumented_log.txt");
+				passthru(escapeshellarg(PHP_BINARY) . " examples.php 2>&1 >> instrumented_log.txt");
 				ob_end_clean();
 				chdir($cwd);
 				putenv("DECOMPOSER");
