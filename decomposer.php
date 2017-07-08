@@ -593,6 +593,8 @@
 							else  @unlink($path . "/" . $file);
 						}
 					}
+
+					closedir($dir);
 				}
 
 				@rmdir($path);
