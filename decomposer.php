@@ -589,8 +589,9 @@
 					{
 						if ($file !== "." && $file !== "..")
 						{
+							@unlink($path . "/" . $file);
+
 							if (is_dir($path . "/" . $file))  DeleteDirectory($path . "/" . $file);
-							else  @unlink($path . "/" . $file);
 						}
 					}
 
