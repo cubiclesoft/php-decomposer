@@ -1,6 +1,6 @@
 <?php
 	// Decomposer runtime functions.
-	// (C) 2017 CubicleSoft.  All Rights Reserved.
+	// (C) 2018 CubicleSoft.  All Rights Reserved.
 
 	class DecomposerHelper
 	{
@@ -14,30 +14,30 @@
 			if (getenv("DECOMPOSER") === "FINAL")  require_once self::$rootpath . "/projects/" . self::$project . "/final/" . self::$project . "_decomposed.php";
 			else if (getenv("DECOMPOSER") === "INSTRUMENT_ALL")
 			{
-				self::$testfp = fopen(self::$rootpath . "/projects/" . self::$project . "/staging/instrument_all_test.txt", "wb");
+				self::$testfp = fopen(self::$rootpath . "/projects/" . self::$project . "/instrument_all_test.txt", "wb");
 				self::$depend = array();
 
-				require_once self::$rootpath . "/projects/" . self::$project . "/staging/vendor/autoload.php";
+				require_once self::$rootpath . "/projects/" . self::$project . "/vendor/autoload.php";
 
-				require_once self::$rootpath . "/projects/" . self::$project . "/staging/instrument_all.php";
+				require_once self::$rootpath . "/projects/" . self::$project . "/instrument_all.php";
 
-				file_put_contents(self::$rootpath . "/projects/" . self::$project . "/staging/instrumented_all.json", json_encode(get_included_files(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-				file_put_contents(self::$rootpath . "/projects/" . self::$project . "/staging/instrumented_depend.json", json_encode(self::$depend, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+				file_put_contents(self::$rootpath . "/projects/" . self::$project . "/instrumented_all.json", json_encode(get_included_files(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+				file_put_contents(self::$rootpath . "/projects/" . self::$project . "/instrumented_depend.json", json_encode(self::$depend, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 				fclose(self::$testfp);
-				@unlink(self::$rootpath . "/projects/" . self::$project . "/staging/instrument_all_test.txt");
+				@unlink(self::$rootpath . "/projects/" . self::$project . "/instrument_all_test.txt");
 
 				exit();
 			}
 			else
 			{
-				require_once self::$rootpath . "/projects/" . self::$project . "/staging/vendor/autoload.php";
+				require_once self::$rootpath . "/projects/" . self::$project . "/vendor/autoload.php";
 			}
 		}
 
 		public static function Finalize()
 		{
-			if (getenv("DECOMPOSER") === "FINAL")  @copy(self::$rootpath . "/projects/" . self::$project . "/staging/composer.json", self::$rootpath . "/projects/" . self::$project . "/final/orig_composer.json");
-			else  file_put_contents(self::$rootpath . "/projects/" . self::$project . "/staging/instrumented.json", json_encode(get_included_files(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+			if (getenv("DECOMPOSER") === "FINAL")  @copy(self::$rootpath . "/projects/" . self::$project . "/composer.json", self::$rootpath . "/projects/" . self::$project . "/final/orig_composer.json");
+			else  file_put_contents(self::$rootpath . "/projects/" . self::$project . "/instrumented.json", json_encode(get_included_files(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 		}
 
 		private static function TryLoadFile($file)

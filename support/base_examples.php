@@ -14,6 +14,6 @@
 	// Put logic here that tests as many scenario(s) as you need in your application.
 
 
-	// Once finished testing, run 'php decomposer.php decompose @PROJECTNAME@' to generate the files you will need.
+	// Once finished testing, run 'php decompose.php' to generate the files you will need.
 	DecomposerHelper::Finalize();
 ?>
