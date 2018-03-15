@@ -1,6 +1,6 @@
 <?php
 	// Decomposer.
-	// (C) 2017 CubicleSoft.  All Rights Reserved.
+	// (C) 2018 CubicleSoft.  All Rights Reserved.
 
 	if (!isset($_SERVER["argc"]) || !$_SERVER["argc"])
 	{
@@ -123,23 +123,27 @@
 
 		// Initialize directory structure.
 		@mkdir($rootpath . "/projects/" . $name, 0770);
-		@mkdir($rootpath . "/projects/" . $name . "/staging", 0770);
 		@mkdir($rootpath . "/projects/" . $name . "/final", 0770);
-		@copy($rootpath . "/support/composer.phar", $rootpath . "/projects/" . $name . "/staging/composer.phar");
+		@copy($rootpath . "/support/composer.phar", $rootpath . "/projects/" . $name . "/composer.phar");
 
 		// Prepare examples file.
 		$data = file_get_contents($rootpath . "/support/base_examples.php");
 		$data = str_replace("@DECOMPOSER_FUNCTIONS@", var_export($rootpath . "/support/decomposer_functions.php", true), $data);
 		$data = str_replace("@ROOTPATH@", var_export($rootpath, true), $data);
 		$data = str_replace("@PROJECT@", var_export($name, true), $data);
-		$data = str_replace("@PROJECTNAME@", $name, $data);
-		@file_put_contents($rootpath . "/projects/" . $name . "/staging/examples.php", $data);
+		@file_put_contents($rootpath . "/projects/" . $name . "/examples.php", $data);
+
+		// Prepare convenience decompose file.
+		$data = file_get_contents($rootpath . "/support/base_decompose.php");
+		$data = str_replace("@ROOTPATH@", var_export($rootpath, true), $data);
+		$data = str_replace("@PROJECT@", var_export($name, true), $data);
+		@file_put_contents($rootpath . "/projects/" . $name . "/decompose.php", $data);
 
 		$result = array(
 			"success" => true,
 			"project" => array(
 				"name" => $name,
-				"path" => $rootpath . "/projects/" . $name . "/staging"
+				"path" => $rootpath . "/projects/" . $name
 			)
 		);
 
@@ -159,8 +163,9 @@
 
 			$mode = CLI::GetLimitedUserInputWithArgs($args, "mode", "Mode", false, "Available class modes:", $modes, true, $suppressoutput);
 
-			$stagingpath = $rootpath . "/projects/" . $name . "/staging";
+			$stagingpath = $rootpath . "/projects/" . $name;
 			$finalpath = $rootpath . "/projects/" . $name . "/final";
+			@mkdir($finalpath, 0770);
 
 			// Determine the system diff patcher to use.
 			$os = php_uname("s");
@@ -268,13 +273,44 @@
 					"closedir" => true,
 					"scandir" => true,
 					"glob" => true,
-					"DirectoryIterator" => true,
-					"RecursiveDirectoryIterator" => true,
+					"directoryiterator" => true,
+					"recursivedirectoryiterator" => true,
 				);
 
 				foreach ($tokens as $num => $token)
 				{
-					if (is_array($token) && $token[0] === T_STRING && isset($warnstrs[$token[1]]))  $warnings[] = "Found '" . $token[1] . "' in '" . $file . "' on line " . $token[2] . ".";
+					if (is_array($token) && $token[0] === T_STRING && isset($warnstrs[strtolower($token[1])]))
+					{
+						$warnings[] = "Found '" . $token[1] . "' in '" . $file . "' on line " . $token[2] . ".";
+					}
+
+					if (is_array($token) && ($token[0] === T_REQUIRE || $token[0] === T_REQUIRE_ONCE || $token[0] === T_INCLUDE || $token[0] === T_INCLUDE_ONCE))
+					{
+						$warnings[] = "Found '" . $token[1] . "' in '" . $file . "' on line " . $token[2] . ".";
+
+						// Determine what string follows and inject a file_exists() wrapper.
+						$y = count($tokens);
+						$filename = "";
+						for ($x = $num + 1; $x < $y; $x++)
+						{
+							if (!is_array($tokens[$x]) && $tokens[$x] === ";")
+							{
+								$tokens[$x] .= " }";
+
+								break;
+							}
+							else if (is_array($tokens[$x]) && $tokens[$x][0] === T_CLOSE_TAG)
+							{
+								$tokens[$x][1] = "} " . $tokens[$x][1];
+
+								break;
+							}
+
+							$filename .= (is_array($tokens[$x]) ? $tokens[$x][1] : $tokens[$x]);
+						}
+
+						$tokens[$num][1] = "{ if (file_exists(" . trim($filename) . "))  " . $tokens[$num][1];
+					}
 				}
 
 				// Condense the data.
@@ -562,7 +598,7 @@
 			chdir($cwd);
 			putenv("DECOMPOSER");
 
-			if (!file_exists($finalpath . "/orig_composer.json"))  CLI::DisplayError("Unable to find the file '" . $finalpath . "/orig_composer.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to verify the final build.", array("success" => false, "warnings" => $warnings, "failed" => $extrafiles));
+			if (!file_exists($finalpath . "/orig_composer.json"))  CLI::DisplayError("Unable to find the file '" . $finalpath . "/orig_composer.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to verify the final build.", array("success" => false, "error" => "Build verification failed.", "errorcode" => "build_verification_failed", "info" => array("warnings" => $warnings, "failed" => $extrafiles)));
 			$finalfiles[] = $finalpath . "/orig_composer.json";
 
 			$result = array(
