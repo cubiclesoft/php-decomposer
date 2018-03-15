@@ -47,14 +47,13 @@ To create a project, run:
 ```
 php decomposer.php create [yourprojectname]
 
-cd projects/[yourprojectname]/staging
+cd projects/[yourprojectname]
 
 php composer.phar require [vendor/someproject:~1.2]
 php composer.phar require [vendor2/someotherproject:~2.0]
 ...
 
-cd ../../..
-php decomposer.php decompose [yourprojectname] all
+php decompose.php all
 ```
 
 This will create a set of directories, run Composer to pull down the various bits of software, and then generate the final decomposed build bundling every file into one fully-validated PHP file in the `projects/[yourprojectname]/final` directory.
@@ -64,10 +63,10 @@ Instrumenting Builds
 
 The 'decompose' command does all of the heavy lifting.  Using the 'all' mode will always work but might be a bit more resource intensive (e.g. RAM) than might be desired on the tail end of things (i.e. your application).  To minimize resource usage, it is possible to teach the command about the classes that are actually going to be used in the most common scenarios.  This is accomplished by instrumenting the build with one or more working examples.
 
-Edit the `/projects/[yourprojectname]/staging/examples.php` file that was generated during project creation.  After that, grab some example code and put it where `examples.php` says to put example code.  Test the functionality by manually running `examples.php` from the command-line.  Note that the usual `require "vendor/autoload.php";` should NOT be called as that is automatically handled by `DecomposerHelper::Init()`.
+Edit the `/projects/[yourprojectname]/examples.php` file that was generated during project creation.  After that, grab some example code and put it where `examples.php` says to put example code.  Test the functionality by manually running `examples.php` from the command-line.  Note that the usual `require "vendor/autoload.php";` should NOT be called as that is automatically handled by `DecomposerHelper::Init()`.
 
 ```
-cd projects/[yourprojectname]/staging
+cd projects/[yourprojectname]
 php examples.php
 ```
 
@@ -76,7 +75,7 @@ Running the code updates 'instrumented.json', which contains a list of files tha
 Once the code is working, preferably with no output to the screen, the 'auto' and 'none' modes become more useful.
 
 ```
-php decomposer.php decompose [yourprojectname] auto
+php decompose.php auto
 ```
 
 The 'auto' mode appends an autoloader to the first generated file that loads the second file if the autoloader is ever called by PHP.  The 'none' mode is for anyone who likes to live dangerously and is okay with their application breaking in spectacular ways at inopportune times.
@@ -90,7 +89,7 @@ If you design a working patch for using a specific project with Decomposer, be a
 
 At the end of a Decomposer run, it outputs any 'warnings' it encountered as well as any 'failed' files.  Warnings are emitted for very specific functions that are known to cause issues and will likely require a patch.  Failed files are emitted for a variety of reasons and may or may not result in functional output.
 
-Any patches should be extremely laser-focused such that they are idempotent since Decomposer will always attempt to apply all patches before instrumenting.
+Any patches should be extremely laser-focused such that they are idempotent since Decomposer will always attempt to apply all patches before instrumenting every time it runs.
 
 How It Works
 ------------
