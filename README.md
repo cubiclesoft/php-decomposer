@@ -5,6 +5,8 @@ Generate no-conflict standalone builds of PHP Composer/PSR-enabled software.
 
 Decomposer is also a fantastic dependency linting tool for Composer enabled projects.  Try integrating it into your automated Continuous Integration (CI) lifecycle to identify various software issues long before anyone else discovers them.
 
+[![Donate](https://cubiclesoft.com/res/donate-shield.png)](https://cubiclesoft.com/donate/)
+
 Features
 --------
 
