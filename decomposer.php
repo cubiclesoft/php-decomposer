@@ -24,8 +24,7 @@
 		"rules" => array(
 			"suppressoutput" => array("arg" => false),
 			"help" => array("arg" => false)
-		),
-		"userinput" => "="
+		)
 	);
 	$args = CLI::ParseCommandLine($options);
 
@@ -55,7 +54,7 @@
 	// Get the command.
 	$cmds = array("list" => "List projects", "create" => "Create a new project", "decompose" => "Decompose dependencies for a project", "delete" => "Deletes a project");
 
-	$cmd = CLI::GetLimitedUserInputWithArgs($args, "cmd", "Command", false, "Available commands:", $cmds, true, $suppressoutput);
+	$cmd = CLI::GetLimitedUserInputWithArgs($args, false, "Command", false, "Available commands:", $cmds, true, $suppressoutput);
 
 	function DisplayResult($result)
 	{
@@ -111,6 +110,8 @@
 	if ($cmd === "list")  DisplayResult(ProjectsList());
 	else if ($cmd === "create")
 	{
+		CLI::ReinitArgs($args, array("name"));
+
 		// Get the project name.
 		do
 		{
@@ -151,10 +152,12 @@
 	}
 	else
 	{
-		$name = GetProjectName();
-
 		if ($cmd === "decompose")
 		{
+			CLI::ReinitArgs($args, array("name", "mode"));
+
+			$name = GetProjectName();
+
 			$modes = array(
 				"all" => "All classes in one file, no autoloader (maximum RAM usage)",
 				"auto" => "Classes used by 'examples.php' with an autoloader for any missing classes (adaptive)",
@@ -502,6 +505,10 @@
 		}
 		else if ($cmd === "delete")
 		{
+			CLI::ReinitArgs($args, array("name"));
+
+			$name = GetProjectName();
+
 			function DeleteDirectory($path)
 			{
 				$dir = @opendir($path);
