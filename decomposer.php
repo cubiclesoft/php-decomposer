@@ -275,9 +275,9 @@
 						{
 							foreach ($items as $item)
 							{
-								if (substr($item, -1) === "/")  $item = substr($item, 0, -1);
+								$item = trim($item, "/");
 
-								FindPHPFiles($path . "/" . $item);
+								FindPHPFiles($path . ($item !== "" ? "/" . $item : ""));
 							}
 						}
 					}
