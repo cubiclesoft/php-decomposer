@@ -110,13 +110,13 @@
 						{
 							if (!is_array($tokens[$x]) && $tokens[$x] === ";")
 							{
-								$tokens[$x] .= " }";
+								$tokens[$x] = " : \"\")" . $tokens[$x];
 
 								break;
 							}
 							else if (is_array($tokens[$x]) && $tokens[$x][0] === T_CLOSE_TAG)
 							{
-								$tokens[$x][1] = "} " . $tokens[$x][1];
+								$tokens[$x][1] = " : \"\")" . $tokens[$x][1];
 
 								break;
 							}
@@ -124,7 +124,7 @@
 							$filename2 .= (is_array($tokens[$x]) ? $tokens[$x][1] : $tokens[$x]);
 						}
 
-						$tokens[$num][1] = "{ if (file_exists(" . trim($filename2) . "))  " . $tokens[$num][1];
+						$tokens[$num][1] = "(file_exists(" . trim($filename2) . ") ? " . $tokens[$num][1];
 					}
 				}
 			}
