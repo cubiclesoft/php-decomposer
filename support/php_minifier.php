@@ -13,12 +13,63 @@
 			}
 		}
 
+		public static function GetClassAliasHandlerStart($prefix)
+		{
+			ob_start();
+?>
+namespace {
+if (!function_exists("<?=$prefix?>___class_alias"))
+{
+	$<?=$prefix?>___class_aliases_for_later = array();
+
+	function <?=$prefix?>___class_alias($class, $alias, $autoload = true)
+	{
+		global $<?=$prefix?>___class_aliases_for_later;
+
+		$<?=$prefix?>___class_aliases_for_later[] = array($class, $alias, $autoload);
+	}
+}}
+<?php
+			$result = ob_get_contents();
+			ob_end_clean();
+
+			return $result;
+		}
+
+		public static function GetClassAliasHandlerEnd($prefix)
+		{
+			ob_start();
+?>
+namespace {
+if (!function_exists("<?=$prefix?>___class_alias__final"))
+{
+	function <?=$prefix?>___class_alias__final()
+	{
+		global $<?=$prefix?>___class_aliases_for_later;
+
+		foreach ($<?=$prefix?>___class_aliases_for_later as $info)  class_alias($info[0], $info[1], $info[2]);
+
+		$<?=$prefix?>___class_aliases_for_later = array();
+	}
+}
+
+<?=$prefix?>___class_alias__final();
+}
+<?php
+			$result = ob_get_contents();
+			ob_end_clean();
+
+			return $result;
+		}
+
 		public static function Minify($filename, $data, $options = array())
 		{
 			if (!isset($options["require_namespace"]))  $options["require_namespace"] = false;
 			if (!isset($options["remove_comments"]))  $options["remove_comments"] = true;
+			if (!isset($options["remove_declare"]))  $options["remove_declare"] = true;
 			if (!isset($options["convert_whitespace"]))  $options["convert_whitespace"] = true;
 			if (!isset($options["check_dir_functions"]))  $options["check_dir_functions"] = false;
+			if (!isset($options["replace_class_alias"]))  $options["replace_class_alias"] = false;
 			if (!isset($options["wrap_includes"]))  $options["wrap_includes"] = false;
 			if (!isset($options["return_tokens"]))  $options["return_tokens"] = false;
 
@@ -39,6 +90,37 @@
 					else if ($options["convert_whitespace"] && is_array($token) && $token[0] === T_WHITESPACE)  $tokens[$num][1] = str_replace("\r", "\n", str_replace("\r\n", "\n", str_replace("  ", "\t", str_replace("   ", "\t", str_replace("    ", "\t", $token[1])))));
 				}
 			}
+
+			// Remove starting declare() statements.
+			if ($options["remove_declare"])
+			{
+				$indeclare = false;
+				foreach ($tokens as $num => $token)
+				{
+					if ($indeclare)
+					{
+						unset($tokens[$num]);
+
+						if (!is_array($token) && $token === ";")  $indeclare = false;
+					}
+					else if (is_array($token))
+					{
+						if ($token[0] === T_NAMESPACE)  break;
+
+						if ($token[0] === T_DECLARE)
+						{
+							unset($tokens[$num]);
+
+							$indeclare = true;
+						}
+					}
+					else if ($token === ";" || $token === "{")  // }
+					{
+						break;
+					}
+				}
+			}
+
 			$tokens = array_values($tokens);
 
 			// Remove starting and trailing PHP tags and whitespace.
@@ -64,7 +146,7 @@
 						if ($token === "{")  break;  // }
 						else if ($token === ";")
 						{
-							$tokens[$num] = " {";
+							$tokens[$num] = " {";  // }
 							$changed = true;
 						}
 					}
@@ -80,6 +162,7 @@
 
 			// Process warnings.
 			$warnings = array();
+			$warntypes = array();
 			if ($options["check_dir_functions"] || $options["wrap_includes"])
 			{
 				$warnstrs = array(
@@ -97,11 +180,27 @@
 					if ($options["check_dir_functions"] && is_array($token) && $token[0] === T_STRING && isset($warnstrs[strtolower($token[1])]))
 					{
 						$warnings[] = self::PMTranslate("Found '%s' in '%s' on line '%d'.", $token[1], $filename, $token[2]);
+
+						if (!isset($warntypes[$token[1]]))  $warntypes[$token[1]] = 0;
+						$warntypes[$token[1]]++;
+					}
+
+					if ($options["replace_class_alias"] !== false && is_array($token) && $token[0] === T_STRING && $token[1] === "class_alias")
+					{
+						$warnings[] = self::PMTranslate("Found '%s' in '%s' on line '%d'.", $token[1], $filename, $token[2]);
+
+						if (!isset($warntypes[$token[1]]))  $warntypes[$token[1]] = 0;
+						$warntypes[$token[1]]++;
+
+						$tokens[$num][1] = $options["replace_class_alias"] . "___class_alias";
 					}
 
 					if ($options["wrap_includes"] && is_array($token) && ($token[0] === T_REQUIRE || $token[0] === T_REQUIRE_ONCE || $token[0] === T_INCLUDE || $token[0] === T_INCLUDE_ONCE))
 					{
 						$warnings[] = self::PMTranslate("Found '%s' in '%s' on line '%d'.", $token[1], $filename, $token[2]);
+
+						if (!isset($warntypes[$token[1]]))  $warntypes[$token[1]] = 0;
+						$warntypes[$token[1]]++;
 
 						// Determine what string follows and inject a file_exists() wrapper.
 						$y = count($tokens);
@@ -176,7 +275,7 @@
 				}
 			}
 
-			return array("success" => true, "filename" => $filename, "data" => $data, "warnings" => $warnings);
+			return array("success" => true, "filename" => $filename, "data" => $data, "warnings" => $warnings, "warntypes" => $warntypes);
 		}
 
 		public static function MinifyFiles($srcdir, $destdir, $recurse = true, $options = array())
