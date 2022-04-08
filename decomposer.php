@@ -219,13 +219,16 @@
 			require_once $rootpath . "/support/php_minifier.php";
 
 			$warnings = array();
+			$warntypes = array();
 			function ProcessNamespacedFile($file, $requirenamespace)
 			{
-				global $warnings;
+				global $warnings, $warntypes;
 
 				$options = array(
 					"require_namespace" => $requirenamespace,
+					"remove_declare" => true,
 					"check_dir_functions" => true,
+					"replace_class_alias" => "DECOMPOSER",
 					"wrap_includes" => true
 				);
 
@@ -233,6 +236,12 @@
 				if (!$result["success"])  return false;
 
 				foreach ($result["warnings"] as $warning)  $warnings[] = $warning;
+				foreach ($result["warntypes"] as $warntype => $num)
+				{
+					if (!isset($warntypes[$warntype]))  $warntypes[$warntype] = 0;
+
+					$warntypes[$warntype] += $num;
+				}
 
 				return $result["data"];
 			}
@@ -437,6 +446,11 @@
 				foreach ($extrafiles as $file => $val)  $instrumented[] = $file;
 			}
 			$data = "<" . "?php\n\t// Generated with Decomposer.";
+			if (isset($warntypes["class_alias"]))
+			{
+				$data .= "\n\n";
+				$data .= PHPMinifier::GetClassAliasHandlerStart("DECOMPOSER");
+			}
 			$instrumented2 = array();
 			foreach ($instrumented as $file)  $instrumented2[str_replace("\\", "/", $file)] = true;
 			foreach ($extrafiles as $file => $data2)
@@ -449,16 +463,20 @@
 				}
 			}
 
+			if (isset($warntypes["class_alias"]))
+			{
+				$data .= "\n\n";
+				$data .= PHPMinifier::GetClassAliasHandlerEnd("DECOMPOSER");
+			}
+
 			if ($mode === "auto" && count($extrafiles))
 			{
-				$str .= "\n\n";
-				$str .= "namespace {\n";
-				$str .= "\tspl_autoload_register(function (\$class) {\n";
-				$str .= "\t\tif (file_exists(__DIR__ . \"/" . $name . "_decomposed_extras.php\"))  require_once __DIR__ . \"/" . $name . "_decomposed_extras.php\";\n";
-				$str .= "\t});\n";
-				$str .= "}";
-
-				$data .= $str;
+				$data .= "\n\n";
+				$data .= "namespace {\n";
+				$data .= "\tspl_autoload_register(function (\$class) {\n";
+				$data .= "\t\tif (file_exists(__DIR__ . \"/" . $name . "_decomposed_extras.php\"))  require_once __DIR__ . \"/" . $name . "_decomposed_extras.php\";\n";
+				$data .= "\t});\n";
+				$data .= "}";
 			}
 
 			file_put_contents($finalpath . "/" . $name . "_decomposed.php", $data);
@@ -487,11 +505,12 @@
 			chdir($cwd);
 			putenv("DECOMPOSER");
 
-			if (!file_exists($finalpath . "/orig_composer.json"))  CLI::DisplayError("Unable to find the file '" . $finalpath . "/orig_composer.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to verify the final build.", array("success" => false, "error" => "Build verification failed.", "errorcode" => "build_verification_failed", "info" => array("warnings" => $warnings, "failed" => $extrafiles)));
+			if (!file_exists($finalpath . "/orig_composer.json"))  CLI::DisplayError("Unable to find the file '" . $finalpath . "/orig_composer.json" . "'.  It appears that '" . $stagingpath . "/examples.php' is not completing normally.  Unable to verify the final build.", array("success" => false, "error" => "Build verification failed.", "errorcode" => "build_verification_failed", "info" => array("warntypes" => $warntypes, "warnings" => $warnings, "failed" => $extrafiles)));
 			$finalfiles[] = $finalpath . "/orig_composer.json";
 
 			$result = array(
 				"success" => true,
+				"warntypes" => $warntypes,
 				"warnings" => $warnings,
 				"failed" => $failedfiles,
 				"project" => array(
