@@ -177,7 +177,7 @@ if (!function_exists("<?=$prefix?>___class_alias__final"))
 
 				foreach ($tokens as $num => $token)
 				{
-					if ($options["check_dir_functions"] && is_array($token) && $token[0] === T_STRING && isset($warnstrs[strtolower($token[1])]))
+					if ($options["check_dir_functions"] && is_array($token) && (($token[0] === T_STRING && isset($warnstrs[strtolower($token[1])])) || ($token[0] === T_NAME_FULLY_QUALIFIED && isset($warnstrs[substr(strtolower($token[1]), 1)]))))
 					{
 						$warnings[] = self::PMTranslate("Found '%s' in '%s' on line '%d'.", $token[1], $filename, $token[2]);
 

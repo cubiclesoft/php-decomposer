@@ -1,6 +1,6 @@
 <?php
 	// Decomposer.
-	// (C) 2018 CubicleSoft.  All Rights Reserved.
+	// (C) 2025 CubicleSoft.  All Rights Reserved.
 
 	if (!isset($_SERVER["argc"]) || !$_SERVER["argc"])
 	{
@@ -250,6 +250,8 @@
 			{
 				global $extrafiles;
 
+				$path = str_replace("\\", "/", realpath($path));
+
 				if (is_file($path) && strtolower(substr($path, -4)) === ".php")
 				{
 					$extrafiles[$path] = ProcessNamespacedFile($path, false);
@@ -257,19 +259,22 @@
 					return;
 				}
 
-				$dir = @opendir($path);
-				if ($dir)
+				if (is_dir($path))
 				{
-					while (($file = readdir($dir)) !== false)
+					$dir = @opendir($path);
+					if ($dir)
 					{
-						if ($file !== "." && $file !== "..")
+						while (($file = readdir($dir)) !== false)
 						{
-							if (is_dir($path . "/" . $file))  FindPHPFiles($path . "/" . $file);
-							else if (strtolower(substr($file, -4)) === ".php")  $extrafiles[$path . "/" . $file] = ProcessNamespacedFile($path . "/" . $file, false);
+							if ($file !== "." && $file !== "..")
+							{
+								if (is_dir($path . "/" . $file))  FindPHPFiles($path . "/" . $file);
+								else if (strtolower(substr($file, -4)) === ".php")  $extrafiles[$path . "/" . $file] = ProcessNamespacedFile($path . "/" . $file, false);
+							}
 						}
-					}
 
-					closedir($dir);
+						closedir($dir);
+					}
 				}
 			}
 
@@ -427,6 +432,7 @@
 						}
 
 						$extrafiles2[$file] = $data;
+//echo "Removing '" . $file . "'...\n";
 						unset($extrafiles[$file]);
 					}
 
